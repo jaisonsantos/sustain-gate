@@ -245,7 +245,7 @@ export default function Exports() {
             <SelectValue placeholder="Filter by template" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All templates</SelectItem>
+            <SelectItem value="all">All templates</SelectItem>
             {templates.map((template) => (
               <SelectItem key={template.id} value={template.id}>
                 {template.name}
