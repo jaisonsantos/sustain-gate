@@ -9,7 +9,7 @@ from typing import Dict, Any
 from .config import settings
 from .db import engine, get_db
 from .deps import get_current_user
-from .routers import auth, datapoints, intakes, exports
+from .routers import auth, datapoints, intakes, exports, billing
 
 # Create FastAPI app
 app = FastAPI(
@@ -32,6 +32,7 @@ app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(datapoints.router, prefix="/datapoints", tags=["datapoints"])
 app.include_router(intakes.router, prefix="/intakes", tags=["intakes"])
 app.include_router(exports.router, prefix="/exports", tags=["exports"])
+app.include_router(billing.router)
 
 @app.get("/healthz")
 async def health_check() -> Dict[str, str]:

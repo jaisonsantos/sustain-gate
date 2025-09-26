@@ -15,6 +15,10 @@ class Tenant(Base):
     name = Column(Text, nullable=False)
     plan = Column(Text, nullable=False)
     is_controller = Column(Boolean, default=True)
+    stripe_customer_id = Column(Text)
+    stripe_subscription_id = Column(Text)
+    billing_status = Column(Text, default="active")  # active, past_due, canceled
+    trial_until = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 class AppUser(Base):
@@ -248,3 +252,24 @@ class AuditLog(Base):
     prev_hash = Column(Text)
     this_hash = Column(Text)
     ts = Column(DateTime(timezone=True), server_default=func.now())
+
+# Usage Tracking
+class UsageCounter(Base):
+    __tablename__ = "usage_counter"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenant.id"))
+    metric = Column(Text)  # active_requests, exports, storage_gb
+    period_start = Column(Date)
+    period_end = Column(Date)
+    value = Column(Numeric)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+# Billing Events
+class BillingEvent(Base):
+    __tablename__ = "billing_event"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    stripe_event_id = Column(Text, unique=True)
+    event_type = Column(Text)
+    processed_at = Column(DateTime(timezone=True), server_default=func.now())

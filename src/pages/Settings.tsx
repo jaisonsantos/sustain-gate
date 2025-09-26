@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -5,6 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { BillingStatusCard } from "@/components/ui/billing-status";
+import { PlanSelector } from "@/components/ui/plan-selector";
+import { billingApi, type BillingStatus, type Plan } from "@/lib/billingApi";
+import { toast } from "@/hooks/use-toast";
 import { 
   Settings as SettingsIcon,
   Shield,
@@ -14,10 +19,72 @@ import {
   Download,
   Upload,
   Trash2,
-  AlertTriangle
+  AlertTriangle,
+  CreditCard
 } from "lucide-react";
 
 export default function Settings() {
+  const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [showPlans, setShowPlans] = useState(false);
+  
+  useEffect(() => {
+    loadBillingData();
+  }, []);
+  
+  const loadBillingData = async () => {
+    try {
+      const [statusResponse, plansResponse] = await Promise.all([
+        billingApi.getBillingStatus(),
+        billingApi.getPlans()
+      ]);
+      setBillingStatus(statusResponse);
+      setPlans(plansResponse.plans);
+    } catch (error) {
+      console.error("Failed to load billing data:", error);
+      // Don't show error toast - billing might not be set up yet
+    }
+  };
+  
+  const handleUpgrade = () => {
+    setShowPlans(true);
+  };
+  
+  const handleSelectPlan = async (priceId: string) => {
+    setLoading(true);
+    try {
+      const response = await billingApi.createCheckoutSession(priceId);
+      window.location.href = response.checkout_url;
+    } catch (error) {
+      console.error("Failed to create checkout session:", error);
+      toast({
+        title: "Error",
+        description: "Failed to start checkout process. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const handleManageBilling = async () => {
+    setLoading(true);
+    try {
+      const response = await billingApi.createPortalSession();
+      window.location.href = response.portal_url;
+    } catch (error) {
+      console.error("Failed to create portal session:", error);
+      toast({
+        title: "Error", 
+        description: "Failed to open billing portal. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+  
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -31,6 +98,49 @@ export default function Settings() {
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Main Settings */}
         <div className="lg:col-span-2 space-y-6">
+          
+          {/* Billing & Plans */}
+          {billingStatus && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <CreditCard className="w-5 h-5" />
+                  Billing & Subscription
+                </CardTitle>
+                <CardDescription>
+                  Manage your subscription plan and billing preferences
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {showPlans ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-medium">Choose Your Plan</h3>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => setShowPlans(false)}
+                      >
+                        Back to Status
+                      </Button>
+                    </div>
+                    <PlanSelector
+                      plans={plans}
+                      currentPlan={billingStatus.plan}
+                      onSelectPlan={handleSelectPlan}
+                      loading={loading}
+                    />
+                  </div>
+                ) : (
+                  <BillingStatusCard
+                    billingStatus={billingStatus}
+                    onUpgrade={handleUpgrade}
+                    onManageBilling={handleManageBilling}
+                  />
+                )}
+              </CardContent>
+            </Card>
+          )}
           {/* Company Information */}
           <Card>
             <CardHeader>
@@ -242,36 +352,40 @@ export default function Settings() {
 
         {/* Sidebar */}
         <div className="space-y-6">
-          {/* Account Status */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Account Status</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>Plan</span>
-                  <Badge>Professional</Badge>
+          {/* Quick Billing */}
+          {billingStatus && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Quick Billing</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span>Current Plan</span>
+                    <Badge>{billingStatus.plan.toUpperCase()}</Badge>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span>Status</span>
+                    <Badge variant={billingStatus.billing_status === 'active' ? 'outline' : 'destructive'}>
+                      {billingStatus.billing_status}
+                    </Badge>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span>Usage</span>
+                    <span>{billingStatus.usage.active_requests} requests</span>
+                  </div>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span>Status</span>
-                  <Badge variant="outline" className="text-success">
-                    Active
-                  </Badge>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span>Storage Used</span>
-                  <span>2.3 GB / 10 GB</span>
-                </div>
-                <div className="w-full h-2 bg-muted rounded-full">
-                  <div className="h-full w-[23%] bg-primary rounded-full" />
-                </div>
-              </div>
-              <Button variant="outline" size="sm" className="w-full">
-                Upgrade Plan
-              </Button>
-            </CardContent>
-          </Card>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="w-full"
+                  onClick={handleUpgrade}
+                >
+                  {billingStatus.plan === 'free' ? 'Subscribe Now' : 'Upgrade Plan'}
+                </Button>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Quick Actions */}
           <Card>

@@ -28,6 +28,16 @@ class Settings(BaseSettings):
     INTAKES_DIR: str = "/data/intakes"
     EXPORTS_DIR: str = "/data/exports"
     
+    # Stripe
+    STRIPE_API_KEY: str = "sk_test_..."
+    STRIPE_WEBHOOK_SECRET: str = "whsec_..."
+    STRIPE_PRICE_POC: str = "price_poc_monthly"
+    STRIPE_PRICE_PRO_T1: str = "price_pro_t1_monthly"
+    STRIPE_PRICE_PRO_T2: str = "price_pro_t2_monthly"
+    STRIPE_PRICE_PRO_T3: str = "price_pro_t3_monthly"
+    STRIPE_PRICE_SETUP: str = "price_setup_onetime"
+    STRIPE_TAX_ENABLED: bool = True
+    
     class Config:
         env_file = ".env"
 

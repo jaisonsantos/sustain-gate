@@ -213,6 +213,30 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint('id')
     )
     
+    # Create usage_counter table
+    op.create_table('usage_counter',
+        sa.Column('id', postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column('tenant_id', postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column('metric', sa.Text(), nullable=True),
+        sa.Column('period_start', sa.Date(), nullable=True),
+        sa.Column('period_end', sa.Date(), nullable=True),
+        sa.Column('value', sa.Numeric(), nullable=True),
+        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+        sa.ForeignKeyConstraint(['tenant_id'], ['tenant.id'], ),
+        sa.PrimaryKeyConstraint('id'),
+        sa.UniqueConstraint('tenant_id', 'metric', 'period_start', 'period_end', name='uq_usage_counter_tenant_metric_period')
+    )
+    
+    # Create billing_event table
+    op.create_table('billing_event',
+        sa.Column('id', postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column('stripe_event_id', sa.Text(), nullable=True),
+        sa.Column('event_type', sa.Text(), nullable=True),
+        sa.Column('processed_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+        sa.PrimaryKeyConstraint('id'),
+        sa.UniqueConstraint('stripe_event_id')
+    )
+    
     # Create remaining tables and apply RLS
     op.execute(open(f'{op.get_context().script.dir}/../app/rls.sql').read())
 
