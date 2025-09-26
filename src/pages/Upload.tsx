@@ -32,6 +32,7 @@ interface UploadEntry {
   status:
     | "uploading"
     | "uploaded"
+    | "parsing"
     | "validating"
     | "validated"
     | "publishing"
@@ -53,6 +54,7 @@ const supplierOptions = [
 const statusConfig: Record<UploadEntry["status"], { label: string; badgeClass: string }> = {
   uploading: { label: "Uploading", badgeClass: "bg-info/10 text-info" },
   uploaded: { label: "Uploaded", badgeClass: "bg-muted text-foreground" },
+  parsing: { label: "Parsing", badgeClass: "bg-muted text-muted-foreground" },
   validating: { label: "Validating", badgeClass: "bg-warning/10 text-warning" },
   validated: { label: "Validated", badgeClass: "bg-success/10 text-success" },
   publishing: { label: "Publishing", badgeClass: "bg-info/10 text-info" },
@@ -118,6 +120,12 @@ export default function Upload() {
           title: "Upload completed",
           description: `${file.name} stored as intake ${uploadResponse.intake_id}`,
         });
+
+        setFiles((prev) =>
+          prev.map((item) => (item.id === entryId ? { ...item, status: "parsing" } : item))
+        );
+
+        await new Promise((resolve) => setTimeout(resolve, 0));
 
         setFiles((prev) =>
           prev.map((item) => (item.id === entryId ? { ...item, status: "validating" } : item))

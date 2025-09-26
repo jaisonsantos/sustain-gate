@@ -17,6 +17,9 @@ supplier data.
 
 ## Quickstart
 
+Looking for a detailed step-by-step walkthrough? Check out the
+[Local Development Guide](docs/local-development.md).
+
 ### 1. Configure environment variables
 
 ```bash
@@ -68,7 +71,8 @@ Log in at `http://localhost:5173/login` with `admin@demo.local / admin123`.
 2. **Protected routes** – navigating to `/`, `/upload`, `/exports`, `/requests`, `/customers`, or
    `/settings` requires the JWT and automatically redirects to `/login` on 401.
 3. **Upload flow** – select the seeded supplier + reporting window, upload a CSV, watch status
-   transition from `uploading → validating`, resolve warnings/errors, publish when ready.
+   transition from `uploading → parsing → validating`, resolve warnings/errors, publish when
+   ready.
 4. **Export flow** – pick the EcoVadis template, supplier, request and period, trigger the export,
    then download the generated ZIP (contains `manifest.json` and `audit.json`).
 5. **Logout** – use the top bar button or hit any 401 to clear the session and go back to `/login`.
