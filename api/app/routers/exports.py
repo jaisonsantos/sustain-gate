@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Dict
@@ -160,3 +161,36 @@ Transport:
         export_job.status = "failed"
         db.commit()
         raise HTTPException(status_code=500, detail=f"Failed to generate export: {str(e)}")
+
+
+@router.get("/jobs/{export_id}/download")
+async def download_export_artifact(
+    export_id: str,
+    db: Session = Depends(get_db),
+    current_user: AppUser = Depends(get_current_user),
+):
+    """Stream the generated export ZIP to the caller."""
+
+    try:
+        export_uuid = uuid.UUID(export_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid export ID")
+
+    export_job = (
+        db.query(ExportJob)
+        .filter(ExportJob.id == export_uuid, ExportJob.tenant_id == current_user.tenant_id)
+        .first()
+    )
+
+    if not export_job or not export_job.output_zip_path:
+        raise HTTPException(status_code=404, detail="Export not found")
+
+    if not os.path.exists(export_job.output_zip_path):
+        raise HTTPException(status_code=404, detail="Export artifact is missing")
+
+    filename = os.path.basename(export_job.output_zip_path)
+    return FileResponse(
+        export_job.output_zip_path,
+        media_type="application/zip",
+        filename=filename,
+    )

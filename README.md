@@ -1,73 +1,104 @@
-# Welcome to your Lovable project
+# Supplier Sustainability Data Router (SSDR)
 
-## Project info
+This repository contains the SSDR MVP: a Vite + React + Tailwind frontend and a FastAPI
+backend stitched together to deliver the upload → validate → publish → export lifecycle for ESG
+supplier data.
 
-**URL**: https://lovable.dev/projects/2581719a-141c-4ed8-967a-a27cc2ee02b1
+## Blueprint audit (MVP scope)
 
-## How can I edit this code?
+| Area | Blueprint expectation | Current state | Follow-up
+| --- | --- | --- | --- |
+| Auth | Password + JWT login, route protection, logout | Implemented with `/auth/token`, local storage token, guards, and automatic 401 recovery | Fase 2: swap fake user for real directory / OAuth
+| Intake pipeline | Upload, validate, publish, status feedback | Fully wired to FastAPI with toasts, retry, and publish control | Extend validation logic + evidence previews
+| Exports | Trigger EcoVadis export and download ZIP | `/exports/{template}` wired from UI, download endpoint added | Add background queue + historical list from DB
+| Datapoints | Canonical ESRS datapoint dictionary | Served from API and surfaced on dashboard | Persist datapoint metadata + editing UI
+| Requests / Customers / Settings | Structural UI ready for data | Still mocked, typed placeholders only | Hook up to dedicated endpoints once ready
+| DevOps | Docker compose, migrations, seeds, documentation | Added demo seed SQL, env examples, README quickstart | Add CI (lint/build) and production IaC in later phase
 
-There are several ways of editing your application.
+## Quickstart
 
-**Use Lovable**
+### 1. Configure environment variables
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/2581719a-141c-4ed8-967a-a27cc2ee02b1) and start prompting.
+```bash
+cp .env.example .env
+```
 
-Changes made via Lovable will be committed automatically to this repo.
+`VITE_API_BASE` controls the frontend ↔ backend communication URL. Default points to
+`http://localhost:8000`.
 
-**Use your preferred IDE**
+### 2. Launch the stack
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+```bash
+cd infra
+docker compose up -d
+```
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+This brings up Postgres, Redis, MinIO, the FastAPI service and (optionally) the frontend.
 
-Follow these steps:
+### 3. Apply migrations & seed demo data
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+```bash
+cd ../api
+poetry install
+poetry run alembic upgrade head
+psql "$POSTGRES_URI" -f seed/demo_seed.sql   # requires psql installed locally
+```
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+The seed creates:
 
-# Step 3: Install the necessary dependencies.
-npm i
+- Tenant `Demo Tenant GmbH`
+- User `admin@demo.local` with the fixed UUID expected by the fake JWT
+- Supplier `DEMO Supplier Ltd` (used in the UI dropdowns)
+- Customer + purpose + data request to unlock the export flow
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+### 4. Run the frontend
+
+```bash
+cd ..
+npm install
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+Log in at `http://localhost:5173/login` with `admin@demo.local / admin123`.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## End-to-end checklist
 
-**Use GitHub Codespaces**
+1. **Login** – `/login` posts to `/auth/token`, persists the JWT in `localStorage`, and redirects to
+   the requested protected route.
+2. **Protected routes** – navigating to `/`, `/upload`, `/exports`, `/requests`, `/customers`, or
+   `/settings` requires the JWT and automatically redirects to `/login` on 401.
+3. **Upload flow** – select the seeded supplier + reporting window, upload a CSV, watch status
+   transition from `uploading → validating`, resolve warnings/errors, publish when ready.
+4. **Export flow** – pick the EcoVadis template, supplier, request and period, trigger the export,
+   then download the generated ZIP (contains `manifest.json` and `audit.json`).
+5. **Logout** – use the top bar button or hit any 401 to clear the session and go back to `/login`.
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Frontend tips
 
-## What technologies are used for this project?
+- Toasts surface success and failure states for every network call.
+- The API client automatically clears the token and redirects when a 401 is returned.
+- The dashboard already consumes the canonical datapoints endpoint to highlight blueprint coverage.
 
-This project is built with:
+## Backend notes
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+- Update CORS origins via `ALLOWED_ORIGINS` in `api/app/config.py` (also exposed in
+  `infra/docker-compose.yml`).
+- `GET /exports/jobs/{export_id}/download` streams the generated ZIPs to the browser.
+- Data directories under `/data` are created automatically; the compose file mounts them via
+  `api_data` volume.
 
-## How can I deploy this project?
+## Linting & builds
 
-Simply open [Lovable](https://lovable.dev/projects/2581719a-141c-4ed8-967a-a27cc2ee02b1) and click on Share -> Publish.
+Run the standard quality gates before opening a PR:
 
-## Can I connect a custom domain to my Lovable project?
+```bash
+npm run lint
+npm run build
+poetry run pytest  # optional today (no tests yet) but ensures the env is healthy
+```
 
-Yes, you can!
+## Contributing
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+- Keep feature work on the `main` branch for now (no branching policy defined).
+- Avoid committing secrets – `.env` is git-ignored and `.env.example` documents required vars.
+- Future roadmap: OAuth, worker queue for exports, customer-facing dashboards, CI workflows.

@@ -15,15 +15,29 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const requestStatuses = [
+type RequestStatus = "new" | "awaiting_data" | "in_review" | "ready" | "delivered";
+type RequestPriority = "high" | "medium" | "low";
+
+interface DataRequest {
+  id: string;
+  customer: string;
+  title: string;
+  status: RequestStatus;
+  dueDate: string;
+  completeness: number;
+  requiredKeys: string[];
+  priority: RequestPriority;
+}
+
+const requestStatuses: { id: RequestStatus; label: string; color: string }[] = [
   { id: "new", label: "New", color: "bg-info text-info-foreground" },
   { id: "awaiting_data", label: "Awaiting Data", color: "bg-warning text-warning-foreground" },
   { id: "in_review", label: "In Review", color: "bg-accent text-accent-foreground" },
   { id: "ready", label: "Ready", color: "bg-success text-success-foreground" },
-  { id: "delivered", label: "Delivered", color: "bg-muted text-muted-foreground" }
+  { id: "delivered", label: "Delivered", color: "bg-muted text-muted-foreground" },
 ];
 
-const sampleRequests = [
+const sampleRequests: DataRequest[] = [
   {
     id: "1",
     customer: "Green Corp GmbH",
@@ -32,7 +46,7 @@ const sampleRequests = [
     dueDate: "2025-11-30",
     completeness: 85,
     requiredKeys: ["energy.electricity_kwh", "water.m3_total", "waste.total_kg"],
-    priority: "high"
+    priority: "high",
   },
   {
     id: "2",
@@ -42,7 +56,7 @@ const sampleRequests = [
     dueDate: "2025-12-15",
     completeness: 40,
     requiredKeys: ["energy.electricity_kwh", "energy.fuels_liters", "freight.ton_km_road"],
-    priority: "medium"
+    priority: "medium",
   },
   {
     id: "3",
@@ -52,7 +66,7 @@ const sampleRequests = [
     dueDate: "2025-10-20",
     completeness: 100,
     requiredKeys: ["energy.renewable_pct", "policy.has_esg_policy"],
-    priority: "low"
+    priority: "low",
   },
   {
     id: "4",
@@ -62,11 +76,11 @@ const sampleRequests = [
     dueDate: "2025-12-01",
     completeness: 0,
     requiredKeys: ["materials.recycled_content_pct", "packaging.kg_total"],
-    priority: "high"
-  }
+    priority: "high",
+  },
 ];
 
-const getPriorityColor = (priority: string) => {
+const getPriorityColor = (priority: RequestPriority) => {
   switch (priority) {
     case "high": return "border-l-destructive";
     case "medium": return "border-l-warning";

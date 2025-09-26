@@ -1,154 +1,414 @@
-import { useState, useCallback } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useCallback, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Upload as UploadIcon, 
-  FileText, 
+import { Input } from "@/components/ui/input";
+import {
+  Upload as UploadIcon,
+  FileText,
   AlertTriangle,
-  CheckCircle,
   X,
   Download,
-  Eye
+  Loader2,
+  ShieldCheck,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { apiClient } from "@/lib/api";
+import type { DatapointDef } from "@/types/datapoint";
+import type { IntakeIssue } from "@/types/intake";
 
-interface UploadedFile {
+interface UploadEntry {
   id: string;
   name: string;
   size: number;
-  status: "uploading" | "parsing" | "validating" | "validated" | "error";
-  errors?: string[];
-  warnings?: string[];
-  dataPoints?: number;
+  status:
+    | "uploading"
+    | "uploaded"
+    | "validating"
+    | "validated"
+    | "publishing"
+    | "published"
+    | "error";
+  intakeId?: string;
+  warnings?: IntakeIssue[];
+  errors?: IntakeIssue[];
+  errorMessage?: string;
 }
 
-const sampleDataPoints = [
-  { key: "energy.electricity_kwh", value: "120000", unit: "kWh", status: "valid" },
-  { key: "water.m3_total", value: "1400", unit: "m³", status: "valid" },
-  { key: "waste.total_kg", value: "2100", unit: "kg", status: "warning" },
-  { key: "energy.renewable_pct", value: "28", unit: "%", status: "valid" },
-  { key: "freight.ton_km_road", value: "7500", unit: "ton·km", status: "error" }
+const supplierOptions = [
+  {
+    id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+    name: "DEMO Supplier Ltd",
+  },
 ];
 
+const statusConfig: Record<UploadEntry["status"], { label: string; badgeClass: string }> = {
+  uploading: { label: "Uploading", badgeClass: "bg-info/10 text-info" },
+  uploaded: { label: "Uploaded", badgeClass: "bg-muted text-foreground" },
+  validating: { label: "Validating", badgeClass: "bg-warning/10 text-warning" },
+  validated: { label: "Validated", badgeClass: "bg-success/10 text-success" },
+  publishing: { label: "Publishing", badgeClass: "bg-info/10 text-info" },
+  published: { label: "Published", badgeClass: "bg-success text-success-foreground" },
+  error: { label: "Action required", badgeClass: "bg-destructive text-destructive-foreground" },
+};
+
+function formatFileSize(bytes: number) {
+  if (bytes === 0) return "0 Bytes";
+  const k = 1024;
+  const sizes = ["Bytes", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+}
+
+function formatIssues(issues?: IntakeIssue[]) {
+  if (!issues || issues.length === 0) return "None";
+  return issues.map((issue) => `${issue.field}: ${issue.message}`).join("; ");
+}
+
 export default function Upload() {
-  const [files, setFiles] = useState<UploadedFile[]>([]);
+  const [files, setFiles] = useState<UploadEntry[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [supplierId, setSupplierId] = useState(() => supplierOptions[0]?.id ?? "");
+  const [periodStart, setPeriodStart] = useState<string>("");
+  const [periodEnd, setPeriodEnd] = useState<string>("");
   const { toast } = useToast();
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
+  const { data: datapoints } = useQuery<DatapointDef[]>({
+    queryKey: ["datapoints"],
+    queryFn: () => apiClient.getDatapoints(),
+  });
+
+  const resetDragState = useCallback(() => setIsDragging(false), []);
+
+  const handleDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
     setIsDragging(true);
   }, []);
 
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  }, []);
+  const handleDragLeave = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    resetDragState();
+  }, [resetDragState]);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    
-    const droppedFiles = Array.from(e.dataTransfer.files);
-    handleFiles(droppedFiles);
-  }, []);
-
-  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const selectedFiles = Array.from(e.target.files);
-      handleFiles(selectedFiles);
-    }
-  }, []);
-
-  const handleFiles = (fileList: File[]) => {
-    const newFiles: UploadedFile[] = fileList.map(file => ({
-      id: Math.random().toString(36).substr(2, 9),
-      name: file.name,
-      size: file.size,
-      status: "uploading"
-    }));
-
-    setFiles(prev => [...prev, ...newFiles]);
-
-    // Simulate upload and processing
-    newFiles.forEach(file => {
-      setTimeout(() => {
-        setFiles(prev => prev.map(f => 
-          f.id === file.id ? { ...f, status: "parsing" } : f
-        ));
-      }, 1000);
-
-      setTimeout(() => {
-        setFiles(prev => prev.map(f => 
-          f.id === file.id ? { ...f, status: "validating" } : f
-        ));
-      }, 2000);
-
-      setTimeout(() => {
-        setFiles(prev => prev.map(f => 
-          f.id === file.id ? { 
-            ...f, 
-            status: "validated",
-            dataPoints: 15,
-            warnings: ["Unit conversion applied for waste data"],
-            errors: []
-          } : f
-        ));
-        
+  const processFile = useCallback(
+    async (entryId: string, file: File) => {
+      try {
+        const uploadResponse = await apiClient.uploadIntake(
+          file,
+          supplierId,
+          periodStart,
+          periodEnd
+        );
+        setFiles((prev) =>
+          prev.map((item) =>
+            item.id === entryId
+              ? { ...item, status: "uploaded", intakeId: uploadResponse.intake_id }
+              : item
+          )
+        );
         toast({
           title: "Upload completed",
-          description: `${file.name} has been processed successfully`,
+          description: `${file.name} stored as intake ${uploadResponse.intake_id}`,
         });
-      }, 3000);
+
+        setFiles((prev) =>
+          prev.map((item) => (item.id === entryId ? { ...item, status: "validating" } : item))
+        );
+
+        const validation = await apiClient.validateIntake(uploadResponse.intake_id);
+        setFiles((prev) =>
+          prev.map((item) =>
+            item.id === entryId
+              ? {
+                  ...item,
+                  status: validation.errors.length > 0 ? "error" : "validated",
+                  warnings: validation.warnings,
+                  errors: validation.errors,
+                }
+              : item
+          )
+        );
+
+        if (validation.errors.length > 0) {
+          toast({
+            title: "Validation issues",
+            description: `${file.name} needs attention: ${formatIssues(validation.errors)}`,
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Validation successful",
+            description: `${file.name} is ready to publish`,
+          });
+        }
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Unexpected error while processing the file.";
+        setFiles((prev) =>
+          prev.map((item) =>
+            item.id === entryId
+              ? {
+                  ...item,
+                  status: "error",
+                  errorMessage: message,
+                }
+              : item
+          )
+        );
+        toast({
+          title: "Upload failed",
+          description: message,
+          variant: "destructive",
+        });
+      }
+    },
+    [periodEnd, periodStart, supplierId, toast]
+  );
+
+  const handleFiles = useCallback(
+    (selectedFiles: File[]) => {
+      if (!supplierId || !periodStart || !periodEnd) {
+        toast({
+          title: "Missing metadata",
+          description: "Select supplier and reporting period before uploading files.",
+          variant: "destructive",
+      });
+      return;
+    }
+
+    if (new Date(periodStart) > new Date(periodEnd)) {
+      toast({
+        title: "Invalid reporting window",
+        description: "The end period must be after the start period.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    selectedFiles.forEach((file) => {
+      const entryId = crypto.randomUUID();
+      const newEntry: UploadEntry = {
+        id: entryId,
+        name: file.name,
+        size: file.size,
+        status: "uploading",
+      };
+      setFiles((prev) => [newEntry, ...prev]);
+      void processFile(entryId, file);
     });
-  };
+    },
+    [periodEnd, periodStart, processFile, supplierId, toast]
+  );
 
-  const removeFile = (fileId: string) => {
-    setFiles(prev => prev.filter(f => f.id !== fileId));
-  };
+  const handleFileInput = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      if (event.target.files?.length) {
+        handleFiles(Array.from(event.target.files));
+        event.target.value = "";
+      }
+    },
+    [handleFiles]
+  );
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "validated": return "text-success";
-      case "error": return "text-destructive";
-      case "validating": return "text-warning";
-      case "parsing": return "text-info";
-      default: return "text-muted-foreground";
+  const handleDrop = useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      resetDragState();
+      if (event.dataTransfer.files?.length) {
+        handleFiles(Array.from(event.dataTransfer.files));
+      }
+    },
+    [handleFiles, resetDragState]
+  );
+
+  const handlePublish = async (entry: UploadEntry) => {
+    if (!entry.intakeId) return;
+    setFiles((prev) =>
+      prev.map((item) => (item.id === entry.id ? { ...item, status: "publishing" } : item))
+    );
+
+    try {
+      const publishResponse = await apiClient.publishIntake(entry.intakeId);
+      setFiles((prev) =>
+        prev.map((item) =>
+          item.id === entry.id
+            ? { ...item, status: "published", intakeId: publishResponse.intake_id }
+            : item
+        )
+      );
+      toast({
+        title: "Intake published",
+        description: `${entry.name} is now available for exports`,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to publish intake. Please retry.";
+      setFiles((prev) =>
+        prev.map((item) =>
+          item.id === entry.id
+            ? { ...item, status: "error", errorMessage: message }
+            : item
+        )
+      );
+      toast({
+        title: "Publish failed",
+        description: message,
+        variant: "destructive",
+      });
     }
   };
 
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case "uploading": return "Uploading...";
-      case "parsing": return "Parsing...";
-      case "validating": return "Validating...";
-      case "validated": return "Ready";
-      case "error": return "Error";
-      default: return status;
+  const handleRevalidate = async (entry: UploadEntry) => {
+    if (!entry.intakeId) return;
+    setFiles((prev) =>
+      prev.map((item) => (item.id === entry.id ? { ...item, status: "validating" } : item))
+    );
+
+    try {
+      const validation = await apiClient.validateIntake(entry.intakeId);
+      setFiles((prev) =>
+        prev.map((item) =>
+          item.id === entry.id
+            ? {
+                ...item,
+                status: validation.errors.length > 0 ? "error" : "validated",
+                warnings: validation.warnings,
+                errors: validation.errors,
+              }
+            : item
+        )
+      );
+
+      if (validation.errors.length > 0) {
+        toast({
+          title: "Validation issues",
+          description: formatIssues(validation.errors),
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Validation successful",
+          description: `${entry.name} is ready to publish`,
+        });
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Validation failed. Please retry.";
+      setFiles((prev) =>
+        prev.map((item) =>
+          item.id === entry.id ? { ...item, status: "error", errorMessage: message } : item
+        )
+      );
+      toast({
+        title: "Validation failed",
+        description: message,
+        variant: "destructive",
+      });
     }
   };
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  const removeFile = (entryId: string) => {
+    setFiles((prev) => prev.filter((item) => item.id !== entryId));
+  };
+
+  const handleDownloadTemplate = () => {
+    if (!datapoints || datapoints.length === 0) {
+      toast({
+        title: "Template unavailable",
+        description: "Seed datapoints before exporting the CSV template.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const headerRow = datapoints.map((point) => point.key).join(",");
+    const csvContent = `${headerRow}\n`;
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", "ssdr-demo-template.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast({
+      title: "Template downloaded",
+      description: "Populate the CSV and upload it using the form above.",
+    });
   };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Upload ESG Data</h1>
         <p className="text-muted-foreground">
-          Upload your sustainability data files (CSV, XLSX) for processing
+          Upload CSV or Excel files, validate them against the canonical datapoints and publish the
+          intake.
         </p>
       </div>
 
-      {/* Upload Area */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Metadata</CardTitle>
+          <CardDescription>Select the supplier and reporting window for this upload.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="supplier">
+                Supplier
+              </label>
+              <select
+                id="supplier"
+                className="w-full rounded-md border bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                value={supplierId}
+                onChange={(event) => setSupplierId(event.target.value)}
+              >
+                {supplierOptions.map((supplier) => (
+                  <option key={supplier.id} value={supplier.id}>
+                    {supplier.name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">
+                Demo supplier seeded via <code>api/seed/demo_seed.sql</code>
+              </p>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="period-start">
+                Period start
+              </label>
+              <Input
+                id="period-start"
+                type="date"
+                value={periodStart}
+                onChange={(event) => setPeriodStart(event.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="period-end">
+                Period end
+              </label>
+              <Input
+                id="period-end"
+                type="date"
+                value={periodEnd}
+                onChange={(event) => setPeriodEnd(event.target.value)}
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card className="border-2 border-dashed">
         <CardContent className="p-8">
           <div
@@ -160,20 +420,22 @@ export default function Upload() {
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
           >
-            <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-              <UploadIcon className="w-8 h-8 text-primary" />
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+              <UploadIcon className="h-8 w-8 text-primary" />
             </div>
             <div className="text-center space-y-2">
               <h3 className="text-lg font-semibold">Upload your ESG data files</h3>
               <p className="text-muted-foreground">
-                Drag and drop your CSV or XLSX files here, or click to browse
+                Drag and drop CSV or XLSX files here, or click to browse
               </p>
             </div>
-            <div className="flex gap-4">
+            <div className="flex flex-wrap gap-4">
               <label htmlFor="file-upload">
-                <Button variant="default" className="cursor-pointer">
-                  <UploadIcon className="w-4 h-4 mr-2" />
-                  Choose Files
+                <Button asChild variant="default" className="cursor-pointer">
+                  <span>
+                    <UploadIcon className="mr-2 h-4 w-4" />
+                    Choose files
+                  </span>
                 </Button>
                 <input
                   id="file-upload"
@@ -184,131 +446,100 @@ export default function Upload() {
                   onChange={handleFileInput}
                 />
               </label>
-              <Button variant="outline">
-                <Download className="w-4 h-4 mr-2" />
-                Download Template
+              <Button variant="outline" onClick={handleDownloadTemplate}>
+                <Download className="mr-2 h-4 w-4" />
+                Download template
               </Button>
             </div>
             <div className="text-xs text-muted-foreground">
-              Supported formats: CSV, XLSX, XLS (Max 10MB per file)
+              Supported formats: CSV, XLSX, XLS (max 10MB per file)
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Uploaded Files */}
-      {files.length > 0 && (
+      {files.length === 0 && (
         <Card>
-          <CardHeader>
-            <CardTitle>Uploaded Files</CardTitle>
-            <CardDescription>
-              Files being processed and their validation status
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {files.map((file) => (
-                <div key={file.id} className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="flex items-center space-x-4">
-                    <FileText className="w-8 h-8 text-muted-foreground" />
-                    <div className="space-y-1">
-                      <p className="font-medium">{file.name}</p>
-                      <div className="flex items-center space-x-4 text-sm text-muted-foreground">
-                        <span>{formatFileSize(file.size)}</span>
-                        <Badge variant="outline" className={getStatusColor(file.status)}>
-                          {getStatusLabel(file.status)}
-                        </Badge>
-                        {file.dataPoints && (
-                          <span>{file.dataPoints} data points</span>
-                        )}
-                      </div>
-                      {file.warnings && file.warnings.length > 0 && (
-                        <div className="flex items-center space-x-1 text-xs text-warning">
-                          <AlertTriangle className="w-3 h-3" />
-                          {file.warnings.length} warning(s)
-                        </div>
-                      )}
-                      {file.errors && file.errors.length > 0 && (
-                        <div className="flex items-center space-x-1 text-xs text-destructive">
-                          <X className="w-3 h-3" />
-                          {file.errors.length} error(s)
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    {file.status === "validated" && (
-                      <Button variant="outline" size="sm">
-                        <Eye className="w-4 h-4 mr-2" />
-                        Preview
-                      </Button>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeFile(file.id)}
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
+          <CardContent className="flex flex-col items-center justify-center space-y-4 py-12 text-center">
+            <ShieldCheck className="h-10 w-10 text-muted-foreground" />
+            <div className="space-y-2">
+              <h3 className="text-lg font-semibold">No uploads yet</h3>
+              <p className="text-sm text-muted-foreground">
+                Upload a CSV or Excel file to start the intake → validation → publish journey.
+              </p>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Data Preview */}
-      {files.some(f => f.status === "validated") && (
+      {files.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Data Preview</CardTitle>
-            <CardDescription>
-              Parsed and normalized sustainability data points
-            </CardDescription>
+            <CardTitle>Upload activity</CardTitle>
+            <CardDescription>Track status, warnings, and publication readiness.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {sampleDataPoints.map((point, index) => (
-                <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                  <div className="space-y-1">
-                    <p className="font-medium">{point.key}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {point.value} {point.unit}
-                    </p>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    {point.status === "valid" && (
-                      <CheckCircle className="w-4 h-4 text-success" />
-                    )}
-                    {point.status === "warning" && (
-                      <AlertTriangle className="w-4 h-4 text-warning" />
-                    )}
-                    {point.status === "error" && (
-                      <X className="w-4 h-4 text-destructive" />
-                    )}
-                    <Badge 
-                      variant="outline" 
-                      className={cn(
-                        point.status === "valid" && "text-success",
-                        point.status === "warning" && "text-warning",
-                        point.status === "error" && "text-destructive"
+              {files.map((file) => {
+                const status = statusConfig[file.status];
+                const hasBlockingErrors = file.errors && file.errors.length > 0;
+                return (
+                  <div
+                    key={file.id}
+                    className="flex flex-col gap-4 rounded-lg border p-4 md:flex-row md:items-center md:justify-between"
+                  >
+                    <div className="flex flex-1 items-start gap-3">
+                      <FileText className="mt-1 h-6 w-6 text-muted-foreground" />
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-medium">{file.name}</p>
+                          <Badge className={status.badgeClass}>{status.label}</Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {formatFileSize(file.size)}
+                          {file.intakeId ? ` • Intake ${file.intakeId}` : ""}
+                        </p>
+                        {file.warnings && file.warnings.length > 0 && (
+                          <div className="flex items-start gap-1 text-xs text-warning">
+                            <AlertTriangle className="mt-0.5 h-3 w-3" />
+                            <span>{formatIssues(file.warnings)}</span>
+                          </div>
+                        )}
+                        {hasBlockingErrors && (
+                          <div className="flex items-start gap-1 text-xs text-destructive">
+                            <X className="mt-0.5 h-3 w-3" />
+                            <span>{formatIssues(file.errors)}</span>
+                          </div>
+                        )}
+                        {file.errorMessage && (
+                          <p className="text-xs text-destructive">{file.errorMessage}</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      {file.status === "validated" && (
+                        <Button size="sm" onClick={() => handlePublish(file)}>
+                          Publish
+                        </Button>
                       )}
-                    >
-                      {point.status}
-                    </Badge>
+                      {file.status === "publishing" && (
+                        <Button size="sm" disabled>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Publishing
+                        </Button>
+                      )}
+                      {file.status === "error" && file.intakeId && (
+                        <Button size="sm" variant="outline" onClick={() => handleRevalidate(file)}>
+                          Re-run validation
+                        </Button>
+                      )}
+                      <Button variant="ghost" size="icon" onClick={() => removeFile(file.id)}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-            
-            <div className="flex justify-end space-x-2 mt-6">
-              <Button variant="outline">
-                Edit Mappings
-              </Button>
-              <Button>
-                Publish Data
-              </Button>
+                );
+              })}
             </div>
           </CardContent>
         </Card>
