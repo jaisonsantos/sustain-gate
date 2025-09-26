@@ -1,183 +1,201 @@
-import { useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useMemo, useState } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { 
-  Download, 
-  FileText, 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Download,
   Package,
   Calendar,
-  Share,
-  Eye,
-  MoreHorizontal,
-  Filter,
-  Search
+  Loader2,
+  Inbox,
+  CheckCircle2,
+  AlertTriangle,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
+import { apiClient } from "@/lib/api";
 
-interface Export {
+interface ExportItem {
   id: string;
-  title: string;
-  customer: string;
   template: string;
-  format: string;
-  status: "queued" | "running" | "done" | "failed";
+  status: "queued" | "done" | "failed";
   createdAt: string;
-  downloadCount: number;
-  expiresAt?: string;
-  size?: string;
+  supplierId: string;
+  requestId: string;
+  periodStart: string;
+  periodEnd: string;
+  zipPath?: string;
 }
 
-const sampleExports: Export[] = [
-  {
-    id: "exp_1",
-    title: "EcoVadis Assessment FY2025",
-    customer: "Green Corp GmbH",
-    template: "ecovadis_basic",
-    format: "PDF + ZIP",
-    status: "done",
-    createdAt: "2025-09-20T10:30:00Z",
-    downloadCount: 3,
-    expiresAt: "2025-12-20T10:30:00Z",
-    size: "2.4 MB"
-  },
-  {
-    id: "exp_2",
-    title: "CDP Climate Response",
-    customer: "Sustainable Industries",
-    template: "cdp_basic",
-    format: "CSV + JSON",
-    status: "running",
-    createdAt: "2025-09-25T09:15:00Z",
-    downloadCount: 0
-  },
-  {
-    id: "exp_3",
-    title: "Custom ESG Report Q4",
-    customer: "ESG Partners Ltd",
-    template: "custom_esg",
-    format: "PDF",
-    status: "done",
-    createdAt: "2025-09-18T14:45:00Z",
-    downloadCount: 1,
-    expiresAt: "2025-11-18T14:45:00Z",
-    size: "1.8 MB"
-  },
-  {
-    id: "exp_4",
-    title: "Supply Chain Assessment",
-    customer: "Green Supply Chain",
-    template: "supply_chain",
-    format: "JSON",
-    status: "failed",
-    createdAt: "2025-09-24T16:20:00Z",
-    downloadCount: 0
-  }
+const templates = [
+  { id: "ecovadis_basic", name: "EcoVadis Basic", description: "Standard EcoVadis assessment" },
+  { id: "cdp_basic", name: "CDP Climate", description: "CDP Climate Change snapshot" },
 ];
 
-const templates = [
-  { id: "ecovadis_basic", name: "EcoVadis Basic", description: "Standard EcoVadis assessment format" },
-  { id: "cdp_basic", name: "CDP Climate", description: "CDP Climate Change questionnaire" },
-  { id: "custom_esg", name: "Custom ESG", description: "Customizable ESG report template" },
-  { id: "supply_chain", name: "Supply Chain", description: "Supply chain sustainability report" }
+const supplierOptions = [
+  {
+    id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+    name: "DEMO Supplier Ltd",
+  },
+];
+
+const requestOptions = [
+  {
+    id: "dddddddd-eeee-ffff-0000-111111111111",
+    title: "EcoVadis FY2025 Demo",
+  },
 ];
 
 export default function Exports() {
-  const [exports, setExports] = useState<Export[]>(sampleExports);
-  const [selectedTemplate, setSelectedTemplate] = useState<string>("");
-  const [searchQuery, setSearchQuery] = useState("");
   const { toast } = useToast();
+  const [exports, setExports] = useState<ExportItem[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState<string>(templates[0]?.id ?? "");
+  const [supplierId, setSupplierId] = useState<string>(supplierOptions[0]?.id ?? "");
+  const [requestId, setRequestId] = useState<string>(requestOptions[0]?.id ?? "");
+  const [periodStart, setPeriodStart] = useState<string>("");
+  const [periodEnd, setPeriodEnd] = useState<string>("");
+  const [isCreating, setIsCreating] = useState(false);
+  const [downloading, setDownloading] = useState<string | null>(null);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "done": return "bg-success text-success-foreground";
-      case "running": return "bg-info text-info-foreground";
-      case "failed": return "bg-destructive text-destructive-foreground";
-      case "queued": return "bg-warning text-warning-foreground";
-      default: return "bg-muted text-muted-foreground";
+  const recentExports = useMemo(() => exports, [exports]);
+
+  const handleCreateExport = async () => {
+    if (!selectedTemplate || !supplierId || !requestId || !periodStart || !periodEnd) {
+      toast({
+        title: "Incomplete form",
+        description: "Fill in all fields before creating an export.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsCreating(true);
+
+    try {
+      const payload = {
+        supplier_id: supplierId,
+        request_id: requestId,
+        period_start: periodStart,
+        period_end: periodEnd,
+      };
+      const response = await apiClient.createExport(selectedTemplate, payload);
+
+      const newExport: ExportItem = {
+        id: response.export_id,
+        template: response.template,
+        status: response.status as ExportItem["status"],
+        createdAt: new Date().toISOString(),
+        supplierId,
+        requestId,
+        periodStart,
+        periodEnd,
+        zipPath: response.zip_path,
+      };
+
+      setExports((prev) => [newExport, ...prev]);
+
+      toast({
+        title: "Export ready",
+        description: `Export ${response.export_id} generated successfully`,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to create export. Please retry.";
+      toast({
+        title: "Export failed",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreating(false);
     }
   };
 
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case "done": return "Ready";
-      case "running": return "Generating";
-      case "failed": return "Failed";
-      case "queued": return "Queued";
-      default: return status;
+  const handleDownload = async (exportItem: ExportItem) => {
+    if (!exportItem.zipPath) {
+      toast({
+        title: "No artifact",
+        description: "The export has no downloadable ZIP yet.",
+        variant: "destructive",
+      });
+      return;
     }
-  };
 
-  const handleCreateExport = () => {
-    toast({
-      title: "Export queued",
-      description: "Your export has been queued for generation",
-    });
-  };
-
-  const handleDownload = (exportId: string) => {
-    setExports(prev => prev.map(exp => 
-      exp.id === exportId 
-        ? { ...exp, downloadCount: exp.downloadCount + 1 }
-        : exp
-    ));
-    
-    toast({
-      title: "Download started",
-      description: "Your export file is being downloaded",
-    });
-  };
-
-  const filteredExports = exports.filter(exp => {
-    const matchesSearch = !searchQuery || 
-      exp.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      exp.customer.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesTemplate = !selectedTemplate || exp.template === selectedTemplate;
-    return matchesSearch && matchesTemplate;
-  });
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    setDownloading(exportItem.id);
+    try {
+      const blob = await apiClient.downloadExport(exportItem.id);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `${exportItem.template}-${exportItem.id}.zip`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast({
+        title: "Download started",
+        description: `${exportItem.template} package is downloading`,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to download export";
+      toast({
+        title: "Download failed",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setDownloading(null);
+    }
   };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Exports & Dossiers</h1>
           <p className="text-muted-foreground">
-            Generate and manage sustainability data exports for your customers
+            Generate EcoVadis-compatible ZIP bundles directly from validated intakes.
           </p>
         </div>
-        <Button onClick={handleCreateExport}>
-          <Package className="w-4 h-4 mr-2" />
-          Create Export
+        <Button onClick={handleCreateExport} disabled={isCreating}>
+          {isCreating ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Creating export...
+            </>
+          ) : (
+            <>
+              <Package className="mr-2 h-4 w-4" />
+              Create export
+            </>
+          )}
         </Button>
       </div>
 
-      {/* Create Export Form */}
       <Card>
         <CardHeader>
-          <CardTitle>Generate New Export</CardTitle>
-          <CardDescription>
-            Create a new sustainability data export for a customer
-          </CardDescription>
+          <CardTitle>Generate new export</CardTitle>
+          <CardDescription>Provide context for the export job you want to run.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             <div className="space-y-2">
               <label className="text-sm font-medium">Template</label>
-              <Select>
+              <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select template" />
                 </SelectTrigger>
@@ -193,176 +211,158 @@ export default function Exports() {
                 </SelectContent>
               </Select>
             </div>
+
             <div className="space-y-2">
-              <label className="text-sm font-medium">Customer</label>
-              <Select>
+              <label className="text-sm font-medium">Supplier</label>
+              <Select value={supplierId} onValueChange={setSupplierId}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select customer" />
+                  <SelectValue placeholder="Select supplier" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="green_corp">Green Corp GmbH</SelectItem>
-                  <SelectItem value="sustainable_ind">Sustainable Industries</SelectItem>
-                  <SelectItem value="esg_partners">ESG Partners Ltd</SelectItem>
+                  {supplierOptions.map((supplier) => (
+                    <SelectItem key={supplier.id} value={supplier.id}>
+                      {supplier.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
+
             <div className="space-y-2">
-              <label className="text-sm font-medium">Period</label>
-              <Select>
+              <label className="text-sm font-medium">Data request</label>
+              <Select value={requestId} onValueChange={setRequestId}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select period" />
+                  <SelectValue placeholder="Select request" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="q4_2024">Q4 2024</SelectItem>
-                  <SelectItem value="fy_2024">FY 2024</SelectItem>
-                  <SelectItem value="q1_2025">Q1 2025</SelectItem>
+                  {requestOptions.map((request) => (
+                    <SelectItem key={request.id} value={request.id}>
+                      {request.title}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Period start</label>
+              <Input type="date" value={periodStart} onChange={(event) => setPeriodStart(event.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Period end</label>
+              <Input type="date" value={periodEnd} onChange={(event) => setPeriodEnd(event.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Request UUID</label>
+              <Input value={requestId} readOnly className="font-mono text-xs" />
             </div>
           </div>
-          <div className="flex justify-end mt-4">
-            <Button onClick={handleCreateExport}>
-              <Package className="w-4 h-4 mr-2" />
-              Generate Export
+          <div className="mt-4 flex items-center justify-end gap-2">
+            <Button variant="outline" onClick={() => {
+              setPeriodStart("");
+              setPeriodEnd("");
+            }}>
+              Reset
+            </Button>
+            <Button onClick={handleCreateExport} disabled={isCreating}>
+              {isCreating ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <Package className="mr-2 h-4 w-4" />
+                  Generate export
+                </>
+              )}
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Search exports..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-        <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="Filter by template" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All templates</SelectItem>
-            {templates.map((template) => (
-              <SelectItem key={template.id} value={template.id}>
-                {template.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Exports List */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Recent Exports</CardTitle>
-              <CardDescription>
-                Generated sustainability data exports and dossiers
-              </CardDescription>
-            </div>
-            <Badge variant="outline">
-              {filteredExports.length} exports
-            </Badge>
-          </div>
+          <CardTitle>Recent exports</CardTitle>
+          <CardDescription>Downloads are available immediately after generation.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {filteredExports.map((exp) => (
-              <div key={exp.id} className="flex items-center justify-between p-4 border rounded-lg">
-                <div className="flex items-center space-x-4">
-                  <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <FileText className="w-6 h-6 text-primary" />
-                  </div>
+          {recentExports.length === 0 && (
+            <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
+              <Inbox className="h-10 w-10" />
+              <p>No exports yet. Generate your first EcoVadis bundle above.</p>
+            </div>
+          )}
+
+          {recentExports.length > 0 && (
+            <div className="space-y-4">
+              {recentExports.map((exportItem) => (
+                <div
+                  key={exportItem.id}
+                  className="flex flex-col gap-4 rounded-lg border p-4 md:flex-row md:items-center md:justify-between"
+                >
                   <div className="space-y-1">
-                    <p className="font-medium">{exp.title}</p>
-                    <div className="flex items-center space-x-4 text-sm text-muted-foreground">
-                      <span>{exp.customer}</span>
-                      <span>•</span>
-                      <span>{exp.format}</span>
-                      <span>•</span>
-                      <span>{formatDate(exp.createdAt)}</span>
-                      {exp.size && (
-                        <>
-                          <span>•</span>
-                          <span>{exp.size}</span>
-                        </>
-                      )}
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Badge className={getStatusColor(exp.status)}>
-                        {getStatusLabel(exp.status)}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium">{exportItem.template}</p>
+                      <Badge
+                        className={
+                          exportItem.status === "done"
+                            ? "bg-success text-success-foreground"
+                            : exportItem.status === "failed"
+                            ? "bg-destructive text-destructive-foreground"
+                            : "bg-info/10 text-info"
+                        }
+                      >
+                        {exportItem.status === "done" ? "Ready" : exportItem.status === "failed" ? "Failed" : "Queued"}
                       </Badge>
-                      {exp.downloadCount > 0 && (
-                        <span className="text-xs text-muted-foreground">
-                          Downloaded {exp.downloadCount} time(s)
-                        </span>
-                      )}
-                      {exp.expiresAt && (
-                        <span className="text-xs text-muted-foreground">
-                          Expires: {formatDate(exp.expiresAt)}
-                        </span>
-                      )}
                     </div>
+                    <p className="text-xs text-muted-foreground">
+                      Supplier {exportItem.supplierId} • Request {exportItem.requestId}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      <Calendar className="mr-1 inline h-3 w-3" />
+                      {new Date(exportItem.createdAt).toLocaleString()}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    {exportItem.status === "done" && (
+                      <Button
+                        size="sm"
+                        onClick={() => handleDownload(exportItem)}
+                        disabled={downloading === exportItem.id}
+                      >
+                        {downloading === exportItem.id ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Preparing...
+                          </>
+                        ) : (
+                          <>
+                            <Download className="mr-2 h-4 w-4" />
+                            Download ZIP
+                          </>
+                        )}
+                      </Button>
+                    )}
+
+                    {exportItem.status === "failed" && (
+                      <Badge variant="destructive" className="flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3" /> Needs retry
+                      </Badge>
+                    )}
+
+                    {exportItem.status === "done" && (
+                      <Badge variant="outline" className="flex items-center gap-1 text-xs">
+                        <CheckCircle2 className="h-3 w-3 text-success" />
+                        Ready for EcoVadis upload
+                      </Badge>
+                    )}
                   </div>
                 </div>
-                
-                <div className="flex items-center space-x-2">
-                  {exp.status === "done" && (
-                    <>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => handleDownload(exp.id)}
-                      >
-                        <Download className="w-4 h-4 mr-2" />
-                        Download
-                      </Button>
-                      <Button variant="outline" size="sm">
-                        <Share className="w-4 h-4 mr-2" />
-                        Share
-                      </Button>
-                      <Button variant="outline" size="sm">
-                        <Eye className="w-4 h-4 mr-2" />
-                        Preview
-                      </Button>
-                    </>
-                  )}
-                  
-                  {exp.status === "failed" && (
-                    <Button variant="outline" size="sm">
-                      Retry
-                    </Button>
-                  )}
-                  
-                  <Button variant="ghost" size="sm">
-                    <MoreHorizontal className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-            ))}
-            
-            {filteredExports.length === 0 && (
-              <div className="text-center py-12">
-                <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-semibold mb-2">No exports found</h3>
-                <p className="text-muted-foreground mb-4">
-                  {searchQuery || selectedTemplate
-                    ? "No exports match your current filters"
-                    : "You haven't created any exports yet"
-                  }
-                </p>
-                <Button onClick={handleCreateExport}>
-                  <Package className="w-4 h-4 mr-2" />
-                  Create Your First Export
-                </Button>
-              </div>
-            )}
-          </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

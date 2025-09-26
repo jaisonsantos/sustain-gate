@@ -1,8 +1,8 @@
 import { Outlet, Link, useLocation } from "react-router-dom";
-import { 
-  BarChart3, 
-  Upload, 
-  FileText, 
+import {
+  BarChart3,
+  Upload,
+  FileText,
   Download, 
   Users, 
   Settings, 
@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/context/AuthContext";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: BarChart3 },
@@ -26,6 +27,7 @@ const navigation = [
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
+  const { email, logout } = useAuth();
 
   return (
     <div className="min-h-screen bg-gradient-subtle">
@@ -101,9 +103,9 @@ export default function Layout() {
           
           <div className="flex items-center space-x-4">
             <div className="text-sm text-muted-foreground">
-              Logged in as: admin@demo.local
+              Logged in as: {email ?? "session"}
             </div>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={() => logout()}>
               Logout
             </Button>
           </div>

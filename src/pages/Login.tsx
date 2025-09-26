@@ -1,40 +1,53 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Shield, Leaf, Globe } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Shield, Leaf, Globe, Loader2, Mail, Chrome } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/context/AuthContext";
 
 export default function Login() {
   const [email, setEmail] = useState("admin@demo.local");
   const [password, setPassword] = useState("admin123");
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
+  const { login, isAuthenticated } = useAuth();
+
+  const fromLocation = (location.state as { from?: { pathname?: string } } | undefined)?.from;
+  const redirectPath = fromLocation?.pathname ?? "/";
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate(redirectPath, { replace: true });
+    }
+  }, [isAuthenticated, navigate, redirectPath]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulate API call
-    setTimeout(() => {
-      if (email === "admin@demo.local" && password === "admin123") {
-        toast({
-          title: "Login successful",
-          description: "Welcome to SSDR Platform",
-        });
-        navigate("/");
-      } else {
-        toast({
-          title: "Login failed",
-          description: "Invalid credentials",
-          variant: "destructive",
-        });
-      }
+    try {
+      await login(email, password);
+      toast({
+        title: "Login successful",
+        description: "Welcome to SSDR Platform",
+      });
+      navigate(redirectPath, { replace: true });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unable to sign in. Please try again.";
+      toast({
+        title: "Login failed",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   return (
@@ -119,15 +132,29 @@ export default function Login() {
                   required
                 />
               </div>
-              <Button 
-                type="submit" 
-                className="w-full" 
+              <Button
+                type="submit"
+                className="w-full"
                 disabled={isLoading}
               >
-                {isLoading ? "Signing in..." : "Sign In"}
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Signing in...
+                  </>
+                ) : (
+                  <>
+                    <Mail className="mr-2 h-4 w-4" />
+                    Sign In with Email
+                  </>
+                )}
+              </Button>
+              <Button type="button" className="w-full" variant="outline" disabled>
+                <Chrome className="mr-2 h-4 w-4" />
+                Sign in with Google (em breve)
               </Button>
             </form>
-            
+
             <div className="mt-6 text-center text-sm text-muted-foreground">
               Demo credentials: admin@demo.local / admin123
             </div>

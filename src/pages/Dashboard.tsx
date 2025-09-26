@@ -1,197 +1,202 @@
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { 
-  TrendingUp, 
-  AlertTriangle, 
-  CheckCircle, 
-  Clock,
-  Upload,
-  FileText,
-  Download,
-  Users
-} from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Upload, FileText, Download, Users, Database, AlertCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 
-const stats = [
-  {
-    name: "Active Requests",
-    value: "12",
-    change: "+2 from last week",
-    icon: FileText,
-    color: "text-info"
-  },
-  {
-    name: "Data Uploads",
-    value: "8",
-    change: "+3 this month",
-    icon: Upload,
-    color: "text-success"
-  },
-  {
-    name: "Exports Generated",
-    value: "24",
-    change: "+12 this month",
-    icon: Download,
-    color: "text-accent"
-  },
-  {
-    name: "Active Customers",
-    value: "6",
-    change: "+1 this quarter",
-    icon: Users,
-    color: "text-primary"
-  }
-];
+import { apiClient } from "@/lib/api";
+import type { DatapointDef } from "@/types/datapoint";
 
-const recentRequests = [
+interface PlaceholderRequest {
+  id: string;
+  title: string;
+  customer: string;
+  status: "new" | "awaiting_data" | "in_review" | "ready";
+  dueDate: string;
+  completeness: number;
+}
+
+const placeholderRequests: PlaceholderRequest[] = [
   {
     id: "1",
-    customer: "Green Corp GmbH",
+    customer: "Demo Customer GmbH",
     title: "EcoVadis FY2025",
-    status: "in_review",
-    dueDate: "2025-11-30",
-    completeness: 85
-  },
-  {
-    id: "2", 
-    customer: "Sustainable Industries",
-    title: "CDP Climate Change",
     status: "awaiting_data",
-    dueDate: "2025-12-15",
-    completeness: 40
+    dueDate: "2025-11-30",
+    completeness: 0,
   },
   {
-    id: "3",
-    customer: "ESG Partners Ltd",
-    title: "Custom Assessment Q4",
-    status: "ready",
-    dueDate: "2025-10-20",
-    completeness: 100
-  }
+    id: "2",
+    customer: "Demo Customer GmbH",
+    title: "CDP Climate Change",
+    status: "new",
+    dueDate: "2025-12-15",
+    completeness: 0,
+  },
 ];
 
-const getStatusColor = (status: string) => {
-  switch (status) {
-    case "ready": return "bg-success text-success-foreground";
-    case "in_review": return "bg-warning text-warning-foreground";
-    case "awaiting_data": return "bg-info text-info-foreground";
-    default: return "bg-muted text-muted-foreground";
-  }
-};
-
-const getStatusLabel = (status: string) => {
-  switch (status) {
-    case "ready": return "Ready";
-    case "in_review": return "In Review";
-    case "awaiting_data": return "Awaiting Data";
-    default: return status;
-  }
+const statusConfig: Record<PlaceholderRequest["status"], { label: string; badgeClass: string }> = {
+  new: { label: "New", badgeClass: "bg-muted text-muted-foreground" },
+  awaiting_data: { label: "Awaiting Data", badgeClass: "bg-info text-info-foreground" },
+  in_review: { label: "In Review", badgeClass: "bg-warning text-warning-foreground" },
+  ready: { label: "Ready", badgeClass: "bg-success text-success-foreground" },
 };
 
 export default function Dashboard() {
+  const { data: datapoints, isLoading, isError, error } = useQuery<DatapointDef[]>({
+    queryKey: ["datapoints"],
+    queryFn: () => apiClient.getDatapoints(),
+  });
+
+  const datapointCount = datapoints?.length ?? 0;
+
+  const metricCards = [
+    {
+      name: "Canonical datapoints",
+      icon: Database,
+      content: (
+        <>
+          <div className="text-2xl font-bold">{datapointCount}</div>
+          <p className="text-xs text-muted-foreground">Available for mapping</p>
+        </>
+      ),
+    },
+    {
+      name: "Active requests",
+      icon: Users,
+      content: (
+        <>
+          <div className="text-2xl font-bold text-muted-foreground">Coming soon</div>
+          <p className="text-xs text-muted-foreground">Waiting for live request feed</p>
+        </>
+      ),
+    },
+    {
+      name: "Recent uploads",
+      icon: Upload,
+      content: (
+        <>
+          <div className="text-2xl font-bold text-muted-foreground">Coming soon</div>
+          <p className="text-xs text-muted-foreground">Will display processed intakes</p>
+        </>
+      ),
+    },
+    {
+      name: "Exports generated",
+      icon: Download,
+      content: (
+        <>
+          <div className="text-2xl font-bold text-muted-foreground">Coming soon</div>
+          <p className="text-xs text-muted-foreground">History will surface here</p>
+        </>
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-8">
-      {/* Header */}
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
         <p className="text-muted-foreground">
-          Monitor your ESG data requests and sustainability reporting
+          Monitor your ESG data flow. Metrics that depend on live pipelines will light up as
+          endpoints land.
         </p>
       </div>
 
-      {/* Stats Grid */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat) => {
-          const Icon = stat.icon;
+        {metricCards.map((card) => {
+          const Icon = card.icon;
           return (
-            <Card key={stat.name} className="relative overflow-hidden">
+            <Card key={card.name} className="relative overflow-hidden">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  {stat.name}
-                </CardTitle>
-                <Icon className={`h-4 w-4 ${stat.color}`} />
+                <CardTitle className="text-sm font-medium">{card.name}</CardTitle>
+                <Icon className="h-4 w-4 text-primary" />
               </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stat.value}</div>
-                <p className="text-xs text-muted-foreground">
-                  {stat.change}
-                </p>
-              </CardContent>
+              <CardContent>{card.content}</CardContent>
             </Card>
           );
         })}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Recent Requests */}
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Recent Data Requests</CardTitle>
+            <CardTitle>Canonical datapoints</CardTitle>
             <CardDescription>
-              Latest ESG data requests from your customers
+              The blueprint-mandated ESRS datapoints available for uploads and exports.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {recentRequests.map((request) => (
-                <div key={request.id} className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="space-y-1">
-                    <p className="font-medium">{request.title}</p>
-                    <p className="text-sm text-muted-foreground">{request.customer}</p>
-                    <div className="flex items-center space-x-2">
-                      <Badge className={getStatusColor(request.status)}>
-                        {getStatusLabel(request.status)}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">
-                        Due: {request.dueDate}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-sm font-medium">{request.completeness}%</div>
-                    <div className="w-16 h-2 bg-muted rounded-full mt-1">
-                      <div 
-                        className="h-full bg-primary rounded-full transition-all"
-                        style={{ width: `${request.completeness}%` }}
-                      />
-                    </div>
-                  </div>
+            {isLoading && (
+              <div className="space-y-3">
+                {Array.from({ length: 4 }).map((_, index) => (
+                  <Skeleton key={index} className="h-12 w-full" />
+                ))}
+              </div>
+            )}
+
+            {isError && (
+              <div className="flex items-start space-x-3 rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
+                <AlertCircle className="mt-0.5 h-4 w-4" />
+                <div>
+                  <p className="font-medium">Failed to load datapoints</p>
+                  <p className="text-muted-foreground">
+                    {error instanceof Error ? error.message : "Unexpected error"}
+                  </p>
                 </div>
-              ))}
-            </div>
-            <div className="mt-4">
-              <Button asChild variant="outline" className="w-full">
-                <Link to="/requests">View All Requests</Link>
-              </Button>
-            </div>
+              </div>
+            )}
+
+            {!isLoading && !isError && datapoints && datapoints.length > 0 && (
+              <div className="space-y-4">
+                {datapoints.map((datapoint) => (
+                  <div key={datapoint.key} className="rounded-lg border p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium">{datapoint.key}</p>
+                        <p className="text-sm text-muted-foreground">{datapoint.description}</p>
+                      </div>
+                      <div className="text-right text-sm text-muted-foreground">
+                        <div>{datapoint.type}</div>
+                        <div>{datapoint.unit}</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {!isLoading && !isError && (!datapoints || datapoints.length === 0) && (
+              <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+                No datapoints available yet. Seed the database using the provided SQL script.
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        {/* Quick Actions */}
         <Card>
           <CardHeader>
             <CardTitle>Quick Actions</CardTitle>
-            <CardDescription>
-              Common tasks and shortcuts
-            </CardDescription>
+            <CardDescription>Common tasks and shortcuts</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <Button asChild className="w-full justify-start" variant="default">
               <Link to="/upload">
-                <Upload className="w-4 h-4 mr-2" />
+                <Upload className="mr-2 h-4 w-4" />
                 Upload ESG Data
               </Link>
             </Button>
             <Button asChild className="w-full justify-start" variant="outline">
               <Link to="/requests">
-                <FileText className="w-4 h-4 mr-2" />
-                Create Request
+                <FileText className="mr-2 h-4 w-4" />
+                Review Data Requests
               </Link>
             </Button>
             <Button asChild className="w-full justify-start" variant="outline">
               <Link to="/exports">
-                <Download className="w-4 h-4 mr-2" />
+                <Download className="mr-2 h-4 w-4" />
                 Generate Export
               </Link>
             </Button>
