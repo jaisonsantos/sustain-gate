@@ -13,6 +13,7 @@ from ..models import AppUser, Intake
 from ..services.audit import log_audit_event
 
 router = APIRouter()
+MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
 
 @router.post("/upload")
 async def upload_intake(
@@ -37,8 +38,15 @@ async def upload_intake(
     file_path = os.path.join(settings.INTAKES_DIR, f"{intake_id}_{file.filename}")
     
     try:
+        content = await file.read()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read file: {str(e)}")
+
+    if len(content) > MAX_UPLOAD_SIZE:
+        raise HTTPException(status_code=413, detail="File exceeds 10MB limit")
+
+    try:
         with open(file_path, "wb") as f:
-            content = await file.read()
             f.write(content)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")

@@ -5,6 +5,9 @@ import type {
   PublishResponse,
 } from "@/types/intake";
 import type { ExportResponse } from "@/types/export";
+import type { DataRequestSummary } from "@/types/request";
+import type { CustomerSummary } from "@/types/customer";
+import type { PlatformSetting } from "@/types/settings";
 
 const DEFAULT_API_BASE = "http://localhost:8000";
 const TOKEN_STORAGE_KEY = "ssdr_token";
@@ -177,6 +180,18 @@ class ApiClient {
     return this.requestBlob(`/exports/jobs/${exportId}/download`, {
       method: "GET",
     });
+  }
+
+  public async listDataRequests(): Promise<DataRequestSummary[]> {
+    return this.request<DataRequestSummary[]>("/requests");
+  }
+
+  public async listCustomers(): Promise<CustomerSummary[]> {
+    return this.request<CustomerSummary[]>("/customers");
+  }
+
+  public async getPlatformSettings(): Promise<PlatformSetting> {
+    return this.request<PlatformSetting>("/settings");
   }
 }
 

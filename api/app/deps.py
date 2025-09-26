@@ -1,6 +1,7 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from jose import jwt, JWTError
 from typing import Optional
 import uuid
@@ -30,7 +31,9 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     user = db.query(AppUser).filter(AppUser.id == uuid.UUID(user_id)).first()
     if user is None:
         raise credentials_exception
-    
+
+    db.execute(text("SELECT set_current_tenant(:tenant_id)"), {"tenant_id": str(user.tenant_id)})
+
     return user
 
 def get_current_tenant(current_user: AppUser = Depends(get_current_user), db: Session = Depends(get_db)) -> Tenant:
