@@ -1,58 +1,109 @@
-# Supplier Sustainability Data Router (SSDR)
+# Sustain Gate
 
-This repository contains the SSDR MVP: a Vite + React + Tailwind frontend and a FastAPI
-backend stitched together to deliver the upload → validate → publish → export lifecycle for ESG
-supplier data.
+Sustain Gate is a full-stack MVP for routing supplier sustainability data through an upload → validate → publish → export workflow.
 
-## Blueprint audit (MVP scope)
+The project combines a FastAPI backend, React frontend, PostgreSQL, Redis, and object storage to model a practical ESG supplier-data pipeline with tenant-aware workflows and export generation.
 
-| Area | Blueprint expectation | Current state | Follow-up
-| --- | --- | --- | --- |
-| Auth | Password + JWT login, route protection, logout | Implemented with `/auth/token`, local storage token, guards, and automatic 401 recovery | Fase 2: swap fake user for real directory / OAuth
-| Intake pipeline | Upload, validate, publish, status feedback | Fully wired to FastAPI with toasts, retry, and publish control | Extend validation logic + evidence previews
-| Exports | Trigger EcoVadis export and download ZIP | `/exports/{template}` wired from UI, download endpoint added | Add background queue + historical list from DB
-| Datapoints | Canonical ESRS datapoint dictionary | Served from API and surfaced on dashboard | Persist datapoint metadata + editing UI
-| Requests / Customers / Settings | Structural UI ready for data | Still mocked, typed placeholders only | Hook up to dedicated endpoints once ready
-| DevOps | Docker compose, migrations, seeds, documentation | Added demo seed SQL, env examples, README quickstart | Add CI (lint/build) and production IaC in later phase
+## Why this project
 
-## Quickstart
+Supplier sustainability workflows often begin as spreadsheets and manual evidence collection. Sustain Gate explores how that process can be turned into a structured system with explicit validation states, canonical datapoints, publishing controls, and reproducible exports.
 
-Looking for a detailed step-by-step walkthrough? Check out the
-[Local Development Guide](docs/local-development.md).
+## Engineering highlights
 
-### 1. Configure environment variables
+- **FastAPI backend** for authentication, supplier-data intake, validation, publishing, and exports.
+- **React/Vite frontend** with protected routes and API-driven workflow states.
+- **PostgreSQL persistence** with Alembic migrations and seeded demo data.
+- **Redis + MinIO** in the local infrastructure stack.
+- **JWT-based authentication** with automatic 401 handling in the frontend API client.
+- **Upload pipeline** with explicit `uploading → parsing → validating` states.
+- **Canonical sustainability datapoints** surfaced through the API and dashboard.
+- **Export generation** for EcoVadis-style outputs, including ZIP downloads with manifest and audit data.
+- **Docker Compose** environment for repeatable local development.
+- Clear separation between implemented MVP paths and future product work.
+
+## Architecture
+
+```text
+                 ┌─────────────────┐
+                 │ React / Vite UI │
+                 └────────┬────────┘
+                          │ JWT / REST
+                          ▼
+                  ┌──────────────┐
+                  │   FastAPI    │
+                  ├──────────────┤
+                  │ auth         │
+                  │ intake       │
+                  │ validation   │
+                  │ publish      │
+                  │ exports      │
+                  └──────┬───────┘
+                         │
+          ┌──────────────┼──────────────┐
+          ▼              ▼              ▼
+      PostgreSQL       Redis          MinIO
+```
+
+## Core workflow
+
+1. Sign in and enter the protected application.
+2. Select a supplier and reporting period.
+3. Upload supplier sustainability data.
+4. Track parsing and validation state.
+5. Resolve warnings or errors.
+6. Publish validated data.
+7. Generate an export for the selected template.
+8. Download the resulting ZIP with manifest and audit information.
+
+## Current capabilities
+
+- JWT login and protected routes.
+- Supplier-data upload and validation lifecycle.
+- Publish controls.
+- Canonical ESRS-style datapoint dictionary exposed by the backend.
+- EcoVadis export trigger and downloadable ZIP output.
+- Seeded supplier, customer, request, and tenant data for demonstrations.
+- Toast-based success/error feedback in the frontend.
+- Automatic logout and redirect on unauthorized API responses.
+
+Some secondary screens such as Requests, Customers, and Settings are structurally present but are not yet fully backed by dedicated production endpoints.
+
+## Tech stack
+
+- **Frontend:** React, Vite, Tailwind
+- **Backend:** FastAPI, Python
+- **Database:** PostgreSQL
+- **Cache / infrastructure:** Redis
+- **Object storage:** MinIO
+- **Migrations:** Alembic
+- **Dependency management:** Poetry
+- **Local orchestration:** Docker Compose
+
+## Quick start
+
+### 1. Configure the environment
 
 ```bash
 cp .env.example .env
 ```
 
-`VITE_API_BASE` controls the frontend ↔ backend communication URL. Default points to
-`http://localhost:8000`.
+`VITE_API_BASE` controls the frontend API URL and defaults to `http://localhost:8000`.
 
-### 2. Launch the stack
+### 2. Start infrastructure
 
 ```bash
 cd infra
 docker compose up -d
 ```
 
-This brings up Postgres, Redis, MinIO, the FastAPI service and (optionally) the frontend.
-
-### 3. Apply migrations & seed demo data
+### 3. Apply migrations and seed demo data
 
 ```bash
 cd ../api
 poetry install
 poetry run alembic upgrade head
-psql "$POSTGRES_URI" -f seed/demo_seed.sql   # requires psql installed locally
+psql "$POSTGRES_URI" -f seed/demo_seed.sql
 ```
-
-The seed creates:
-
-- Tenant `Demo Tenant GmbH`
-- User `admin@demo.local` with the fixed UUID expected by the fake JWT
-- Supplier `DEMO Supplier Ltd` (used in the UI dropdowns)
-- Customer + purpose + data request to unlock the export flow
 
 ### 4. Run the frontend
 
@@ -62,47 +113,48 @@ npm install
 npm run dev
 ```
 
-Log in at `http://localhost:5173/login` with `admin@demo.local / admin123`.
+Open `http://localhost:5173`.
 
-## End-to-end checklist
+For a full walkthrough, see [`docs/local-development.md`](docs/local-development.md).
 
-1. **Login** – `/login` posts to `/auth/token`, persists the JWT in `localStorage`, and redirects to
-   the requested protected route.
-2. **Protected routes** – navigating to `/`, `/upload`, `/exports`, `/requests`, `/customers`, or
-   `/settings` requires the JWT and automatically redirects to `/login` on 401.
-3. **Upload flow** – select the seeded supplier + reporting window, upload a CSV, watch status
-   transition from `uploading → parsing → validating`, resolve warnings/errors, publish when
-   ready.
-4. **Export flow** – pick the EcoVadis template, supplier, request and period, trigger the export,
-   then download the generated ZIP (contains `manifest.json` and `audit.json`).
-5. **Logout** – use the top bar button or hit any 401 to clear the session and go back to `/login`.
+## Local demo data
 
-## Frontend tips
+The seed creates a demo tenant, user, supplier, customer, purpose, and data request so the complete intake/export workflow can be exercised locally.
 
-- Toasts surface success and failure states for every network call.
-- The API client automatically clears the token and redirects when a 401 is returned.
-- The dashboard already consumes the canonical datapoints endpoint to highlight blueprint coverage.
+Demo credentials are development-only fixtures. Do not reuse them outside the local environment.
 
-## Backend notes
-
-- Update CORS origins via `ALLOWED_ORIGINS` in `api/app/config.py` (also exposed in
-  `infra/docker-compose.yml`).
-- `GET /exports/jobs/{export_id}/download` streams the generated ZIPs to the browser.
-- Data directories under `/data` are created automatically; the compose file mounts them via
-  `api_data` volume.
-
-## Linting & builds
-
-Run the standard quality gates before opening a PR:
+## Quality checks
 
 ```bash
 npm run lint
 npm run build
-poetry run pytest  # optional today (no tests yet) but ensures the env is healthy
+poetry run pytest
 ```
 
-## Contributing
+The current repository is still an MVP, so test coverage and CI are areas for further expansion.
 
-- Keep feature work on the `main` branch for now (no branching policy defined).
-- Avoid committing secrets – `.env` is git-ignored and `.env.example` documents required vars.
-- Future roadmap: OAuth, worker queue for exports, customer-facing dashboards, CI workflows.
+## Backend notes
+
+- CORS origins are configured through `ALLOWED_ORIGINS`.
+- Generated export artifacts are streamed through `GET /exports/jobs/{export_id}/download`.
+- Local data directories are mounted through Docker volumes.
+- Environment-specific secrets belong in `.env` or deployment secret stores; `.env` itself is ignored by Git.
+
+## Project status
+
+This repository intentionally reflects an MVP boundary rather than pretending every screen is production-complete.
+
+Implemented end-to-end:
+
+- authentication;
+- supplier intake;
+- validation state;
+- publishing;
+- canonical datapoints;
+- export creation and download.
+
+Planned follow-up areas include richer validation/evidence views, persistent metadata editing, background export queues, customer-facing workflows, broader automated test coverage, and production infrastructure.
+
+## Scope
+
+Sustain Gate is a portfolio/MVP project for exploring sustainability-data ingestion and workflow architecture. It is not a production ESG compliance platform and does not make regulatory compliance claims.
